@@ -233,6 +233,11 @@
       <button class="btn btn-primary" onclick="goTo('calendar')">希望を申請する</button>
       <button class="btn btn-secondary" onclick="goTo('summary')">申請内容を確認・修正する</button>
     </div>
+    <div id="debug-log" style="margin-top:16px;background:#1a1a2e;border-radius:var(--radius-sm);padding:12px;display:none;">
+      <div style="font-size:10px;font-weight:700;color:#7c7caa;margin-bottom:6px;letter-spacing:1px;">DEBUG LOG</div>
+      <div id="debug-log-body" style="font-size:11px;color:#a0a0d0;line-height:1.8;word-break:break-all;max-height:200px;overflow-y:auto;"></div>
+      <button onclick="document.getElementById('debug-log').style.display='none'" style="margin-top:8px;font-size:11px;color:#7c7caa;background:none;border:1px solid #3a3a5e;border-radius:4px;padding:2px 8px;cursor:pointer;font-family:inherit;">閉じる</button>
+    </div>
   </div>
 </div>
 
@@ -403,15 +408,19 @@
 
   // ── スタッフ情報取得 ──
   async function loadStaffInfo() {
-    const res = await fetch(`${GAS_URL}?action=getStaff`);
-    const staff = await res.json();
-    const me = staff.find(s => s['LINE_UserID'] === userProfile.userId);
-    staffId = me ? me['スタッフID'] : 'ST001';
+    const res   = await fetch(`${GAS_URL}?action=getShifts`, { mode: 'cors' });
+    const check = await res.json();
+    if (check.error) throw new Error(check.error);
+
+    // LINE UserIDをそのままstaffIdとして使用
+    staffId = userProfile.userId;
+
+
   }
 
   // ── シフト枠取得 ──
   async function loadShiftSlots() {
-    const res = await fetch(`${GAS_URL}?action=getShifts`);
+    const res = await fetch(`${GAS_URL}?action=getShifts`, { mode: 'cors' });
     shiftSlots = await res.json();
 
     // メインセレクト
@@ -440,7 +449,7 @@
   // ── 既存申請を読み込む ──
   async function loadExistingRequests() {
     const ym = `${targetYear}-${String(targetMonth).padStart(2,'0')}`;
-    const res = await fetch(`${GAS_URL}?action=getRequests&yearMonth=${ym}`);
+    const res = await fetch(`${GAS_URL}?action=getRequests&yearMonth=${ym}`, { mode: 'cors' });
     const requests = await res.json();
     const myRequests = requests.filter(r => r['スタッフID'] === staffId);
 
@@ -872,17 +881,35 @@
 
     // バックグラウンドで送信
     try {
-      await fetch(GAS_URL, {
+      debugLog('送信開始: adds=' + adds.length + ' updates=' + updates.length + ' deletes=' + deletes.length);
+      debugLog('staffId: ' + staffId);
+      debugLog('lineUserId: ' + userProfile.userId);
+
+      const res = await fetch(GAS_URL, {
         method: 'POST',
         body: JSON.stringify({
           action: 'syncRequests',
           yearMonth: ym,
+          lineUserId: userProfile.userId,
           staffId,
           adds,
           updates,
           deletes
         })
       });
+
+      debugLog('HTTPステータス: ' + res.status);
+      const text = await res.text();
+      debugLog('レスポンス: ' + text.substring(0, 200));
+
+      let result;
+      try { result = JSON.parse(text); } catch(e) { debugLog('JSONパースエラー: ' + e.message, 'error'); }
+
+      if (result && result.success === false) {
+        debugLog('GASエラー: ' + result.error, 'error');
+      } else if (result && result.success) {
+        debugLog('送信成功！', 'success');
+      }
 
       // 送信後にローカル状態を更新
       adds.forEach(item => {
@@ -900,6 +927,7 @@
       localData    = JSON.parse(JSON.stringify(serverData));
 
     } catch (err) {
+      debugLog('fetchエラー: ' + err.message, 'error');
       console.error('送信エラー:', err);
     }
   }
@@ -919,6 +947,19 @@
   document.getElementById('edit-modal').addEventListener('click', function(e) {
     if (e.target === this) closeModal();
   });
+
+  // ── デバッグログ ──
+  function debugLog(msg, type = 'info') {
+    const logEl = document.getElementById('debug-log');
+    const body  = document.getElementById('debug-log-body');
+    if (!logEl || !body) return;
+    logEl.style.display = 'block';
+    const time  = new Date().toLocaleTimeString('ja-JP');
+    const color = type === 'error' ? '#ff6b6b' : type === 'success' ? '#6bffb8' : '#a0a0d0';
+    body.innerHTML += `<div style="color:${color};">[${time}] ${msg}</div>`;
+    body.scrollTop = body.scrollHeight;
+    console.log(`[${type}] ${msg}`);
+  }
 
   // ── 起動 ──
   init();
