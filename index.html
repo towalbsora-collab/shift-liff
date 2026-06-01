@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>シフト申請</title>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F7F8FA;
+    --surface: #FFFFFF;
+    --border: #E8EAF0;
+    --text-primary: #111827;
+    --text-secondary: #6B7280;
+    --text-muted: #9CA3AF;
+    --accent: #4F46E5;
+    --accent-light: #EEF2FF;
+    --accent-hover: #4338CA;
+    --success: #10B981;
+    --success-light: #ECFDF5;
+    --warning: #F59E0B;
+    --warning-light: #FFFBEB;
+    --danger: #EF4444;
+    --danger-light: #FEF2F2;
+    --radius: 16px;
+    --radius-sm: 10px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body {
+    font-family:'Noto Sans JP',sans-serif;
+    background:var(--bg); color:var(--text-primary);
+    min-height:100vh; max-width:430px; margin:0 auto;
+  }
+
+  /* Loading */
+  .loading-screen {
+    position:fixed; inset:0;
+    background:var(--surface);
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    z-index:999;
+  }
+  .loading-spinner {
+    width:36px; height:36px;
+    border:3px solid var(--border);
+    border-top-color:var(--accent);
+    border-radius:50%;
+    animation:spin 0.8s linear infinite;
+    margin-bottom:16px;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .loading-text { font-size:13px; color:var(--text-muted); }
+
+  /* Header */
+  .header {
+    background:var(--surface);
+    padding:20px 20px 16px;
+    border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:100;
+  }
+  .header-title { font-size:17px; font-weight:700; letter-spacing:-0.3px; }
+  .header-sub { font-size:12px; color:var(--text-muted); margin-top:2px; }
+
+  /* Screens */
+  .screen { display:none; animation:fadeIn 0.2s ease; }
+  .screen.active { display:block; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(6px);} to{opacity:1;transform:translateY(0);} }
+
+  /* Home */
+  .home-content { padding:20px; }
+  .month-display {
+    background:linear-gradient(135deg,#4F46E5 0%,#7C3AED 100%);
+    border-radius:var(--radius); padding:24px 20px;
+    margin-bottom:16px; color:white;
+    position:relative; overflow:hidden;
+  }
+  .month-display::after {
+    content:''; position:absolute; right:-20px; top:-20px;
+    width:120px; height:120px;
+    background:rgba(255,255,255,0.06); border-radius:50%;
+  }
+  .month-label { font-size:11px; font-weight:500; opacity:0.7; margin-bottom:4px; letter-spacing:0.6px; }
+  .month-value { font-size:28px; font-weight:700; letter-spacing:-1px; font-family:'DM Sans',sans-serif; }
+  .month-sub { font-size:12px; opacity:0.6; margin-top:6px; }
+
+  .status-card {
+    background:var(--surface); border-radius:var(--radius);
+    padding:20px; margin-bottom:16px; box-shadow:var(--shadow);
+  }
+  .status-label { font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:10px; }
+  .status-row { display:flex; align-items:center; justify-content:space-between; }
+  .status-badge { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:99px; font-size:13px; font-weight:500; }
+  .badge-pending { background:var(--warning-light); color:#B45309; }
+  .badge-done { background:var(--success-light); color:#065F46; }
+  .badge-dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .deadline-text { font-size:13px; color:var(--text-secondary); }
+  .deadline-text span { font-weight:600; color:var(--danger); }
+
+  .action-buttons { display:flex; flex-direction:column; gap:10px; }
+  .btn {
+    width:100%; padding:16px; border:none; border-radius:var(--radius-sm);
+    font-family:inherit; font-size:15px; font-weight:600; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    transition:all 0.15s ease;
+  }
+  .btn:active { transform:scale(0.98); }
+  .btn-primary { background:var(--accent); color:white; }
+  .btn-primary:hover { background:var(--accent-hover); }
+  .btn-secondary { background:var(--surface); color:var(--text-primary); border:1.5px solid var(--border); }
+  .btn-secondary:hover { border-color:var(--accent); color:var(--accent); }
+
+  /* Calendar */
+  .calendar-content { padding:16px 16px 100px; }
+  .mode-selector {
+    display:flex; background:var(--surface);
+    border-radius:var(--radius-sm); padding:4px;
+    margin-bottom:0; box-shadow:var(--shadow); gap:4px;
+  }
+  .mode-btn {
+    flex:1; padding:12px 8px; border:none; border-radius:8px;
+    font-family:inherit; font-size:14px; font-weight:600; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:6px;
+    transition:all 0.2s ease; color:var(--text-muted); background:none;
+  }
+  .mode-btn.active-off { background:var(--danger-light); color:var(--danger); }
+  .mode-btn.active-shift { background:var(--success-light); color:var(--success); }
+
+  .time-panel {
+    background:var(--success-light); border:1.5px solid #A7F3D0;
+    border-radius:var(--radius-sm); padding:14px 16px;
+    margin-top:8px; display:none; animation:fadeIn 0.2s ease;
+  }
+  .time-panel.visible { display:block; }
+  .time-panel-title { font-size:12px; font-weight:700; color:#065F46; margin-bottom:10px; }
+  .shift-select {
+    width:100%; padding:10px 14px;
+    border:1.5px solid #A7F3D0; border-radius:8px;
+    font-family:inherit; font-size:14px; font-weight:500;
+    color:var(--text-primary); background:white; outline:none;
+    appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 14px center;
+    cursor:pointer;
+  }
+  .custom-time-row { display:none; align-items:center; gap:8px; margin-top:10px; }
+  .custom-time-row.visible { display:flex; }
+  .time-input {
+    flex:1; padding:10px; border:1.5px solid #A7F3D0; border-radius:8px;
+    font-family:inherit; font-size:15px; font-weight:500;
+    color:var(--text-primary); background:white; outline:none; text-align:center;
+  }
+  .time-sep { font-size:16px; color:var(--text-muted); flex-shrink:0; }
+
+  .selected-bar {
+    display:none; background:var(--surface);
+    border-radius:var(--radius-sm); padding:12px 16px;
+    margin-top:8px; box-shadow:var(--shadow);
+    align-items:center; justify-content:space-between;
+  }
+  .selected-bar.visible { display:flex; }
+  .selected-bar-left { display:flex; align-items:center; gap:10px; }
+  .selected-count-badge { width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; }
+  .badge-off { background:var(--danger-light); color:var(--danger); }
+  .badge-shift { background:var(--success-light); color:var(--success); }
+  .selected-bar-text { font-size:13px; font-weight:500; color:var(--text-secondary); }
+  .clear-btn { font-size:12px; color:var(--text-muted); border:none; background:none; cursor:pointer; font-family:inherit; }
+
+  .calendar-card {
+    background:var(--surface); border-radius:var(--radius);
+    padding:14px; box-shadow:var(--shadow); margin-top:8px;
+  }
+  .cal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .cal-month { font-size:16px; font-weight:700; font-family:'DM Sans',sans-serif; }
+  .cal-weekdays { display:grid; grid-template-columns:repeat(7,1fr); margin-bottom:4px; }
+  .cal-weekday { text-align:center; font-size:10px; font-weight:600; color:var(--text-muted); padding:4px 0; }
+  .cal-weekday:first-child { color:var(--danger); }
+  .cal-weekday:last-child { color:var(--accent); }
+  .cal-days { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+  .cal-day {
+    aspect-ratio:1; display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    border-radius:8px; cursor:pointer;
+    position:relative; transition:all 0.1s; user-select:none; overflow:hidden; padding:2px 1px;
+  }
+  .cal-day:active { transform:scale(0.88); }
+  .cal-day.empty { cursor:default; }
+  .cal-day.sunday .day-num { color:var(--danger); }
+  .cal-day.saturday .day-num { color:var(--accent); }
+  .cal-day.today .day-num {
+    background:var(--accent); color:white !important;
+    border-radius:50%; width:24px; height:24px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .cal-day.off-selected { background:var(--danger-light); }
+  .cal-day.shift-selected { background:var(--success-light); }
+  .day-num { font-size:13px; font-weight:500; color:var(--text-primary); line-height:1; }
+  .day-time-label {
+    font-size:8px; font-weight:700; line-height:1; margin-top:2px;
+    text-align:center; max-width:100%; overflow:hidden;
+    white-space:nowrap; text-overflow:ellipsis; padding:0 2px;
+  }
+  .off-selected .day-num { color:var(--danger); }
+  .shift-selected .day-num { color:var(--success); }
+  .off-selected .day-time-label { color:var(--danger); }
+  .shift-selected .day-time-label { color:var(--success); }
+
+  .legend { display:flex; gap:14px; margin-top:10px; padding:0 2px; }
+  .legend-item { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text-muted); }
+  .legend-dot { width:8px; height:8px; border-radius:50%; }
+  .next-btn-wrap { margin-top:12px; }
+
+  /* Summary */
+  .summary-content { padding:20px; }
+  .section-title { font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:14px; }
+  .summary-card { background:var(--surface); border-radius:var(--radius); padding:20px; box-shadow:var(--shadow); margin-bottom:16px; }
+  .summary-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid var(--border); }
+  .summary-month { font-size:15px; font-weight:700; }
+  .summary-count { font-size:12px; color:var(--text-muted); background:var(--bg); padding:4px 10px; border-radius:99px; }
+  .summary-list { display:flex; flex-direction:column; gap:8px; }
+  .summary-item { display:flex; align-items:center; gap:12px; padding:12px; border-radius:var(--radius-sm); background:var(--bg); }
+  .summary-item-icon { width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .icon-off { background:var(--danger-light); }
+  .icon-shift { background:var(--success-light); }
+  .summary-item-info { flex:1; }
+  .summary-item-date { font-size:14px; font-weight:600; }
+  .summary-item-type { font-size:12px; color:var(--text-muted); margin-top:1px; }
+  .summary-item-delete { width:28px; height:28px; border:none; background:none; cursor:pointer; color:var(--text-muted); font-size:16px; border-radius:6px; display:flex; align-items:center; justify-content:center; transition:all 0.15s; }
+  .summary-item-delete:hover { background:var(--danger-light); color:var(--danger); }
+  .empty-state { text-align:center; padding:32px 20px; color:var(--text-muted); font-size:14px; line-height:1.8; }
+  .submit-section { padding:0 20px 32px; }
+  .submit-note { font-size:12px; color:var(--text-muted); text-align:center; margin-bottom:12px; }
+
+  /* Bottom Nav */
+  .bottom-nav {
+    position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+    width:100%; max-width:430px;
+    background:var(--surface); border-top:1px solid var(--border);
+    display:flex; padding:8px 0 20px; z-index:100;
+  }
+  .nav-item { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px; cursor:pointer; border:none; background:none; font-family:inherit; transition:all 0.15s; }
+  .nav-label { font-size:14px; font-weight:600; color:var(--text-muted); letter-spacing:0.3px; }
+  .nav-item.active .nav-label { color:var(--accent); }
+  .page-padding { padding-bottom:80px; }
+
+  /* Complete */
+  .complete-screen { display:none; flex-direction:column; align-items:center; justify-content:center; padding:60px 20px; text-align:center; min-height:60vh; }
+  .complete-screen.active { display:flex; }
+  .complete-icon { width:80px; height:80px; background:var(--success-light); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:36px; margin-bottom:20px; animation:popIn 0.4s cubic-bezier(0.34,1.56,0.64,1); }
+  @keyframes popIn { from{transform:scale(0);opacity:0;} to{transform:scale(1);opacity:1;} }
+  .complete-title { font-size:20px; font-weight:700; margin-bottom:8px; }
+  .complete-sub { font-size:14px; color:var(--text-muted); line-height:1.6; }
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div class="loading-screen" id="loading">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">読み込み中...</div>
+</div>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-title">シフト申請</div>
+  <div class="header-sub" id="header-name">読み込み中...</div>
+</div>
+
+<!-- Home -->
+<div id="screen-home" class="screen page-padding">
+  <div class="home-content">
+    <div class="month-display">
+      <div class="month-label">申請対象月</div>
+      <div class="month-value" id="target-month">--</div>
+      <div class="month-sub" id="deadline-range">--</div>
+    </div>
+    <div class="status-card">
+      <div class="status-label">申請ステータス</div>
+      <div class="status-row">
+        <div class="status-badge badge-pending" id="status-badge">
+          <span class="badge-dot"></span>未提出
+        </div>
+        <div class="deadline-text" id="deadline-text">締め切り <span>--</span></div>
+      </div>
+    </div>
+    <div class="action-buttons">
+      <button class="btn btn-primary" onclick="goTo('calendar')">希望を申請する</button>
+      <button class="btn btn-secondary" onclick="goTo('summary')">申請内容を確認・修正する</button>
+    </div>
+  </div>
+</div>
+
+<!-- Calendar -->
+<div id="screen-calendar" class="screen page-padding">
+  <div class="calendar-content">
+    <div class="mode-selector">
+      <button class="mode-btn" id="mode-off" onclick="setMode('off')">休み希望</button>
+      <button class="mode-btn" id="mode-shift" onclick="setMode('shift')">シフト希望</button>
+    </div>
+    <div class="time-panel" id="time-panel">
+      <div class="time-panel-title">希望する時間帯を先に選んでください</div>
+      <select class="shift-select" id="shift-select" onchange="handleShiftSelect(this.value)">
+        <option value="">シフト枠を選ぶ</option>
+      </select>
+      <div class="custom-time-row" id="custom-time-row">
+        <input type="time" class="time-input" id="time-start" value="09:00" oninput="updateCustomLabel()">
+        <span class="time-sep">→</span>
+        <input type="time" class="time-input" id="time-end" value="18:00" oninput="updateCustomLabel()">
+      </div>
+    </div>
+    <div class="selected-bar" id="selected-bar">
+      <div class="selected-bar-left">
+        <div class="selected-count-badge" id="count-badge">0</div>
+        <div class="selected-bar-text">日選択中</div>
+      </div>
+      <button class="clear-btn" onclick="clearSelection()">クリア</button>
+    </div>
+    <div class="calendar-card">
+      <div class="cal-header">
+        <div class="cal-month" id="cal-month-label">--</div>
+      </div>
+      <div class="cal-weekdays">
+        <div class="cal-weekday">日</div><div class="cal-weekday">月</div>
+        <div class="cal-weekday">火</div><div class="cal-weekday">水</div>
+        <div class="cal-weekday">木</div><div class="cal-weekday">金</div>
+        <div class="cal-weekday">土</div>
+      </div>
+      <div class="cal-days" id="calendar-days"></div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:var(--danger)"></div>休み希望</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--success)"></div>シフト希望</div>
+    </div>
+    <div class="next-btn-wrap">
+      <button class="btn btn-primary" id="next-btn" style="display:none;" onclick="goTo('summary')">確認画面へ →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Summary -->
+<div id="screen-summary" class="screen page-padding">
+  <div class="summary-content">
+    <div class="section-title">申請内容の確認</div>
+    <div class="summary-card">
+      <div class="summary-header">
+        <div class="summary-month" id="summary-month">--</div>
+        <div class="summary-count" id="summary-count">0件の申請</div>
+      </div>
+      <div class="summary-list" id="summary-list"></div>
+    </div>
+  </div>
+  <div class="submit-section">
+    <div class="submit-note" id="submit-note">締め切り：--まで変更できます</div>
+    <button class="btn btn-primary" onclick="submitRequests()">この内容で提出する</button>
+  </div>
+</div>
+
+<!-- Complete -->
+<div id="screen-complete" class="complete-screen page-padding">
+  <div class="complete-icon">✓</div>
+  <div class="complete-title">申請が完了しました</div>
+  <div class="complete-sub">LINEにも確認メッセージを<br>送りましたのでご確認ください</div>
+  <button class="btn btn-secondary" style="margin-top:32px;max-width:200px;" onclick="goTo('home')">ホームに戻る</button>
+</div>
+
+<!-- Bottom Nav -->
+<div class="bottom-nav">
+  <button class="nav-item active" id="nav-home" onclick="goTo('home')">
+    <span class="nav-label">ホーム</span>
+  </button>
+  <button class="nav-item" id="nav-calendar" onclick="goTo('calendar')">
+    <span class="nav-label">申請</span>
+  </button>
+  <button class="nav-item" id="nav-summary" onclick="goTo('summary')">
+    <span class="nav-label">確認</span>
+  </button>
+</div>
+
+<script>
+  // ── 設定 ──
+  const LIFF_ID = '2010102219-JKfrOUCW';
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbwUZ7WVlHsrMGD0boMd-vOvCqm4UHk8lXVS_hP48I1u1ZuKrQVg-d4ySYKisDrmGwb8/exec';
+
+  // ── 状態管理 ──
+  let userProfile = null;
+  let staffId = null;
+  let selectedDays = {};
+  let currentMode = null;
+  let currentTimeLabel = '';
+  let shiftSlots = [];
+  let targetYear, targetMonth;
+
+  const dowNames = ['日','月','火','水','木','金','土'];
+
+  // ── 初期化 ──
+  async function init() {
+    try {
+      await liff.init({ liffId: LIFF_ID });
+
+      if (!liff.isLoggedIn()) {
+        liff.login();
+        return;
+      }
+
+      // プロフィール取得
+      userProfile = await liff.getProfile();
+      document.getElementById('header-name').textContent = userProfile.displayName + 'さん';
+
+      // GASからスタッフ情報・シフト枠を取得
+      await Promise.all([loadStaffInfo(), loadShiftSlots()]);
+
+      // 対象月を計算（翌月）
+      const now = new Date();
+      targetYear = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear();
+      targetMonth = now.getMonth() === 11 ? 1 : now.getMonth() + 2;
+
+      updateMonthDisplay();
+      generateCalendar();
+      await loadExistingRequests();
+
+      // ローディング非表示
+      document.getElementById('loading').style.display = 'none';
+      goTo('home');
+
+    } catch (err) {
+      console.error(err);
+      document.getElementById('loading').innerHTML =
+        '<div style="color:#EF4444;font-size:14px;padding:20px;text-align:center;">読み込みに失敗しました<br>' + err.message + '</div>';
+    }
+  }
+
+  // ── スタッフ情報取得 ──
+  async function loadStaffInfo() {
+    const res = await fetch(`${GAS_URL}?action=getStaff`);
+    const staff = await res.json();
+    const me = staff.find(s => s['LINE_UserID'] === userProfile.userId);
+    if (me) {
+      staffId = me['スタッフID'];
+    } else {
+      // 未登録の場合（デモ用にST001を使用）
+      staffId = 'ST001';
+    }
+  }
+
+  // ── シフト枠取得 ──
+  async function loadShiftSlots() {
+    const res = await fetch(`${GAS_URL}?action=getShifts`);
+    shiftSlots = await res.json();
+
+    const select = document.getElementById('shift-select');
+    select.innerHTML = '<option value="">シフト枠を選ぶ</option>';
+    shiftSlots.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s['シフト枠ID'];
+      opt.textContent = `${s['開始時間']} 〜 ${s['終了時間']}`;
+      select.appendChild(opt);
+    });
+    const customOpt = document.createElement('option');
+    customOpt.value = 'custom';
+    customOpt.textContent = '時間を手動入力する';
+    select.appendChild(customOpt);
+  }
+
+  // ── 既存申請を読み込む ──
+  async function loadExistingRequests() {
+    const ym = `${targetYear}-${String(targetMonth).padStart(2,'0')}`;
+    const res = await fetch(`${GAS_URL}?action=getRequests&yearMonth=${ym}`);
+    const requests = await res.json();
+
+    const myRequests = requests.filter(r => r['スタッフID'] === staffId);
+    myRequests.forEach(r => {
+      const key = r['対象日'];
+      const type = r['申請種別'] === '休み希望' ? 'off' : 'shift';
+      const timeLabel = type === 'off' ? '休み' : `${r['希望開始時間']}〜${r['希望終了時間']}`;
+      selectedDays[key] = { type, timeLabel, shiftId: r['シフト枠ID'] };
+    });
+
+    if (myRequests.length > 0) {
+      const badge = document.getElementById('status-badge');
+      badge.className = 'status-badge badge-done';
+      badge.innerHTML = '<span class="badge-dot"></span>提出済み';
+    }
+
+    generateCalendar();
+    updateSelectedBar();
+  }
+
+  // ── 月表示の更新 ──
+  function updateMonthDisplay() {
+    const ym = `${targetYear}年${targetMonth}月`;
+    document.getElementById('target-month').textContent = ym;
+    document.getElementById('summary-month').textContent = ym;
+    document.getElementById('cal-month-label').textContent = ym;
+
+    const now = new Date();
+    const deadlineDay = 20;
+    const deadlineMonth = now.getMonth() + 1;
+    const deadlineYear = now.getFullYear();
+    const deadline = `${deadlineYear}年${deadlineMonth}月${deadlineDay}日`;
+
+    const daysLeft = Math.ceil((new Date(deadlineYear, deadlineMonth - 1, deadlineDay) - now) / (1000 * 60 * 60 * 24));
+    document.getElementById('deadline-range').textContent = `${now.getMonth()+1}月1日〜${now.getMonth()+1}月20日に申請できます`;
+    document.getElementById('deadline-text').innerHTML = `締め切り <span>${daysLeft > 0 ? daysLeft + '日後' : '本日'}</span>`;
+    document.getElementById('submit-note').textContent = `締め切り：${deadline}まで変更できます`;
+  }
+
+  // ── モード選択 ──
+  function setMode(mode) {
+    currentMode = mode;
+    document.getElementById('mode-off').className = 'mode-btn' + (mode === 'off' ? ' active-off' : '');
+    document.getElementById('mode-shift').className = 'mode-btn' + (mode === 'shift' ? ' active-shift' : '');
+    const timePanel = document.getElementById('time-panel');
+    if (mode === 'off') {
+      timePanel.classList.remove('visible');
+      currentTimeLabel = '休み';
+    } else {
+      timePanel.classList.add('visible');
+      const val = document.getElementById('shift-select').value;
+      if (val && val !== 'custom') {
+        const slot = shiftSlots.find(s => s['シフト枠ID'] === val);
+        if (slot) currentTimeLabel = `${slot['開始時間']}〜${slot['終了時間']}`;
+      }
+    }
+    updateNextBtn();
+  }
+
+  function handleShiftSelect(val) {
+    document.getElementById('custom-time-row').className = 'custom-time-row' + (val === 'custom' ? ' visible' : '');
+    if (val && val !== 'custom') {
+      const slot = shiftSlots.find(s => s['シフト枠ID'] === val);
+      if (slot) currentTimeLabel = `${slot['開始時間']}〜${slot['終了時間']}`;
+    } else if (val === 'custom') {
+      updateCustomLabel();
+    }
+    Object.keys(selectedDays).forEach(k => {
+      if (selectedDays[k].type === 'shift') selectedDays[k].timeLabel = currentTimeLabel;
+    });
+    generateCalendar();
+    updateNextBtn();
+  }
+
+  function updateCustomLabel() {
+    const s = document.getElementById('time-start').value;
+    const e = document.getElementById('time-end').value;
+    if (s && e) currentTimeLabel = `${s}〜${e}`;
+    Object.keys(selectedDays).forEach(k => {
+      if (selectedDays[k].type === 'shift') selectedDays[k].timeLabel = currentTimeLabel;
+    });
+    generateCalendar();
+  }
+
+  // ── 日付タップ ──
+  function toggleDay(key, d, dow) {
+    if (!currentMode) return;
+    if (currentMode === 'shift' && !document.getElementById('shift-select').value) return;
+
+    if (selectedDays[key] && selectedDays[key].type === currentMode) {
+      delete selectedDays[key];
+    } else {
+      const shiftId = currentMode === 'shift' ? document.getElementById('shift-select').value : '';
+      selectedDays[key] = { type: currentMode, timeLabel: currentTimeLabel, shiftId };
+    }
+    generateCalendar();
+    updateSelectedBar();
+    updateNextBtn();
+  }
+
+  function updateSelectedBar() {
+    const keys = Object.keys(selectedDays);
+    const bar = document.getElementById('selected-bar');
+    if (keys.length === 0) { bar.classList.remove('visible'); return; }
+    bar.classList.add('visible');
+    const badge = document.getElementById('count-badge');
+    badge.textContent = keys.length;
+    badge.className = 'selected-count-badge ' + (currentMode === 'off' ? 'badge-off' : 'badge-shift');
+  }
+
+  function updateNextBtn() {
+    const btn = document.getElementById('next-btn');
+    const hasSelection = Object.keys(selectedDays).length > 0;
+    const shiftNeedsTime = currentMode === 'shift' && !document.getElementById('shift-select').value;
+    btn.style.display = (hasSelection && !shiftNeedsTime) ? 'flex' : 'none';
+  }
+
+  function clearSelection() {
+    Object.keys(selectedDays).forEach(k => delete selectedDays[k]);
+    generateCalendar();
+    document.getElementById('selected-bar').classList.remove('visible');
+    updateNextBtn();
+  }
+
+  // ── カレンダー生成 ──
+  function generateCalendar() {
+    const el = document.getElementById('calendar-days');
+    el.innerHTML = '';
+    const firstDay = new Date(targetYear, targetMonth - 1, 1).getDay();
+    const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+    const today = new Date();
+
+    for (let i = 0; i < firstDay; i++) {
+      const e = document.createElement('div');
+      e.className = 'cal-day empty';
+      el.appendChild(e);
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const key = `${targetYear}-${String(targetMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const dow = new Date(targetYear, targetMonth - 1, d).getDay();
+      const div = document.createElement('div');
+      div.className = 'cal-day';
+      if (dow === 0) div.classList.add('sunday');
+      if (dow === 6) div.classList.add('saturday');
+
+      let labelHtml = '';
+      if (selectedDays[key]) {
+        const t = selectedDays[key].type;
+        div.classList.add(t === 'off' ? 'off-selected' : 'shift-selected');
+        const label = selectedDays[key].timeLabel || '';
+        if (label) {
+          let shortLabel = t === 'off' ? '休み' : label;
+          if (t === 'shift') {
+            const match = label.match(/(\d+)[:.]?\d*[〜～\-](\d+)/);
+            if (match) shortLabel = `${match[1]}-${match[2]}`;
+          }
+          labelHtml = `<div class="day-time-label">${shortLabel}</div>`;
+        }
+      }
+
+      div.innerHTML = `<span class="day-num">${d}</span>${labelHtml}`;
+      div.onclick = () => toggleDay(key, d, dow);
+      el.appendChild(div);
+    }
+  }
+
+  // ── サマリー表示 ──
+  function renderSummary() {
+    const list = document.getElementById('summary-list');
+    const keys = Object.keys(selectedDays).sort();
+    document.getElementById('summary-count').textContent = `${keys.length}件の申請`;
+
+    if (keys.length === 0) {
+      list.innerHTML = '<div class="empty-state">申請がありません<br>申請画面から希望を入力してください</div>';
+      return;
+    }
+
+    list.innerHTML = keys.map(key => {
+      const d = selectedDays[key];
+      const date = new Date(key);
+      const mo = date.getMonth() + 1;
+      const day = date.getDate();
+      const dow = dowNames[date.getDay()];
+      const isOff = d.type === 'off';
+      return `
+        <div class="summary-item">
+          <div class="summary-item-icon ${isOff ? 'icon-off' : 'icon-shift'}"></div>
+          <div class="summary-item-info">
+            <div class="summary-item-date">${mo}月${day}日（${dow}）</div>
+            <div class="summary-item-type">${isOff ? '休み希望' : d.timeLabel || '時間未設定'}</div>
+          </div>
+          <button class="summary-item-delete" onclick="deleteDay('${key}')">×</button>
+        </div>`;
+    }).join('');
+  }
+
+  function deleteDay(key) {
+    delete selectedDays[key];
+    renderSummary();
+  }
+
+  // ── GASへ申請を送信 ──
+  async function submitRequests() {
+    const keys = Object.keys(selectedDays);
+    if (keys.length === 0) return;
+
+    const ym = `${targetYear}-${String(targetMonth).padStart(2,'0')}`;
+
+    try {
+      for (const key of keys) {
+        const d = selectedDays[key];
+        const isOff = d.type === 'off';
+        const timeParts = isOff ? ['', ''] : (d.timeLabel || '').split('〜');
+
+        await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'submitRequest',
+            staffId,
+            yearMonth: ym,
+            date: key,
+            requestType: isOff ? '休み希望' : 'シフト希望',
+            shiftId: d.shiftId || '',
+            startTime: timeParts[0] || '',
+            endTime: timeParts[1] || '',
+            operator: staffId
+          })
+        });
+      }
+
+      // 完了画面へ
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById('screen-complete').classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+    } catch (err) {
+      alert('送信に失敗しました。もう一度お試しください。');
+    }
+  }
+
+  // ── 画面遷移 ──
+  function goTo(screen) {
+    if (screen === 'summary') renderSummary();
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById('screen-complete').classList.remove('active');
+    document.getElementById(`screen-${screen}`).classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById(`nav-${screen}`)?.classList.add('active');
+  }
+
+  // ── 起動 ──
+  init();
+</script>
+</body>
+</html>
