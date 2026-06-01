@@ -408,19 +408,21 @@
 
   // ── スタッフ情報取得 ──
   async function loadStaffInfo() {
-    const res   = await fetch(`${GAS_URL}?action=getShifts`, { mode: 'cors' });
-    const check = await res.json();
-    if (check.error) throw new Error(check.error);
+    const res   = await fetch(`${GAS_URL}?action=getStaff`);
+    const staff = await res.json();
 
-    // LINE UserIDをそのままstaffIdとして使用
-    staffId = userProfile.userId;
+    if (!Array.isArray(staff)) throw new Error('スタッフ情報の取得に失敗しました');
 
+    // LINE UserIDからスタッフIDを特定
+    const me = staff.find(s => s['LINE_UserID'] === userProfile.userId);
+    if (!me) throw new Error('このLINEアカウントは登録されていません。管理者にご連絡ください。');
 
+    staffId = me['スタッフID'];
   }
 
   // ── シフト枠取得 ──
   async function loadShiftSlots() {
-    const res = await fetch(`${GAS_URL}?action=getShifts`, { mode: 'cors' });
+    const res = await fetch(`${GAS_URL}?action=getShifts`);
     shiftSlots = await res.json();
 
     // メインセレクト
@@ -449,7 +451,7 @@
   // ── 既存申請を読み込む ──
   async function loadExistingRequests() {
     const ym = `${targetYear}-${String(targetMonth).padStart(2,'0')}`;
-    const res = await fetch(`${GAS_URL}?action=getRequests&yearMonth=${ym}`, { mode: 'cors' });
+    const res = await fetch(`${GAS_URL}?action=getRequests&yearMonth=${ym}`);
     const requests = await res.json();
     const myRequests = requests.filter(r => r['スタッフID'] === staffId);
 
